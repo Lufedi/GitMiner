@@ -14,7 +14,8 @@ class Parser(object):
     def __init__(self):
         # XPATH QUERIES
         self.PAGINATION = '//div[contains(@class, "pagination")]/a/text()'
-        self.URLFILE = '//div[contains(@class, "d-flex")]/div[contains(@class, "flex-auto min-width-0 col-10")]/a[2]/@href'
+        # self.URLFILE = '//div[contains(@class, "d-flex")]/div[contains(@class, "f4 text-normal")]/a/@href'
+        self.URLFILE = '//*[@id="code_search_results"]/div[*]/div[*]/div/div[2]/a/@href'
         self.LASTINDEXED = '//div[contains(@class, "d-flex")]/div/div[contains(@class, "flex-column")]/span[2]/relative-time/@datetime'
         self.USER = '//div[contains(@class, "d-flex")]/a[1]/img/@alt'
         self.NEXTPAGE = '//a[contains(@class, "next_page")]/@href'
@@ -23,6 +24,12 @@ class Parser(object):
         self.github_url = 'https://github.com'
         self.github_raw_url = 'https://raw.githubusercontent.com'
 
+    def saveLink(self, output, link):
+        if link is not None:
+            with open(link, 'a') as write_file:
+                json.dump(output, write_file)
+                write_file.write(',')
+                write_file.close()
     def saveOutput(self, output, filename):
         if filename is not None:
             with open(filename, 'a') as write_file:
@@ -59,7 +66,7 @@ class Parser(object):
                                         param_list[user][_parameters[_param]].update({"%s" % str(count):"%s" % value_parsed})
                                 else:
                                     param_list[user].update({"%s" % _parameters[_param]:{"1":"%s" % value_parsed}})
-        self.saveOutput(param_list, filename)
+        #self.saveOutput(param_list, filename)
 
     def getContainsFile(self, content_html, _contains):
         print("{GREEN}[+]{END} {BLUE}CONTAIN{END}: ".format(**colors))
@@ -121,7 +128,8 @@ class Parser(object):
             url_code = self.github_raw_url + url_file[number_url].replace("blob/","")
             content_html = requestPage(url_code, headers_raw, cookie)
             content_html = content_html.text
-            print("{GREEN}[+]{END} {BLUE}USER{END}: %s".format(**colors) % user[number_url])
+            user = url_file[number_url].split("/")[1]
+            print("{GREEN}[+]{END} {BLUE}USER{END}: %s".format(**colors) % user )
             print("{GREEN}[+]{END} {BLUE}LINK{END}: %s\n".format(**colors) % url_code)
             try:
                 print("{GREEN}[+]{END} {BLUE}LAST INDEXED{END}: %s".format(**colors) \
@@ -129,10 +137,12 @@ class Parser(object):
             except Exception as inst:
                 #print(inst)
                 pass
-            self.codeParser(content_html, config, user[number_url], filename, regex)
+            self.saveLink(url_file[number_url], filename)
+            self.codeParser(content_html, config, user, filename, regex)
 
         if not next_page:
             sys.exit() 
+
         next_page = next_page[0]
         next_page = self.github_url + next_page
         nextPage(next_page, number_page, headers, cookie, config, filename, regex)
