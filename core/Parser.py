@@ -1,148 +1,98 @@
-import json
 import sys
-import re
+import time
+
 from lxml import html
-sys.path.append('../')
+
 from core.sendRequest import requestPage
-from core.sendRequest import nextPage
 from config.banner import colors
-from config import headers as head
+
+MAX_RETRIES = 5
+
+sys.path.append('../')
+sys.setrecursionlimit(1048576)
 
 
 class Parser(object):
-    
-    def __init__(self):
-        # XPATH QUERIES
-        self.PAGINATION = '//div[contains(@class, "pagination")]/a/text()'
-        # self.URLFILE = '//div[contains(@class, "d-flex")]/div[contains(@class, "f4 text-normal")]/a/@href'
-        self.URLFILE = '//*[@id="code_search_results"]/div[*]/div[*]/div/div[2]/a/@href'
-        self.LASTINDEXED = '//div[contains(@class, "d-flex")]/div/div[contains(@class, "flex-column")]/span[2]/relative-time/@datetime'
-        self.USER = '//div[contains(@class, "d-flex")]/a[1]/img/@alt'
-        self.NEXTPAGE = '//a[contains(@class, "next_page")]/@href'
-        
-        # URL GITHUB
-        self.github_url = 'https://github.com'
-        self.github_raw_url = 'https://raw.githubusercontent.com'
+    # XPATH QUERIES
+    PAGINATION = '//div[contains(@class, "pagination")]/a/text()'
+    URL_FILE = '//*[@id="code_search_results"]/div[*]/div[*]/div/div[2]/a/@href'
+    NEXT_PAGE = '//a[contains(@class, "next_page")]/@href'
+    # URL GITHUB
+    GITHUB_URL = 'https://github.com'
+    GITHUB_RAW_URL = 'https://raw.githubusercontent.com'
 
-    def saveLink(self, output, link):
-        if link is not None:
-            with open(link, 'a') as write_file:
-                json.dump(output, write_file)
-                write_file.write(',')
-                write_file.close()
-    def saveOutput(self, output, filename):
-        if filename is not None:
-            with open(filename, 'a') as write_file:
-                json.dump(output, write_file)
-                write_file.write(',')
-                write_file.close()
+    def __init__(self, headers, cookie, file, total_pages):
+        self.cookie = cookie
+        self.headers = headers
+        self.file = file
+        self.total_pages = total_pages
 
+        self.seen_urls = set()
 
-    def parseParameters(self, content_html, _parameters, _splitparam, _splitorder, user, filename):
-        param_list = {user:{}}
-        for _param in _parameters:
-            for line_param in content_html.split("\n"):
-                #print(content_html)
-                #print(line_param)
-                if _parameters[_param] in line_param:
-                    _line_param = line_param.replace(_parameters[_param], \
-                                 '{BOLD}{RED}%s{END}' % _parameters[_param])
-                    print(" {GREEN}+{END} {BOLD}LINE{END}: %s".format(**colors) \
-                          % _line_param.format(**colors).strip())
-                    for split_order in _splitorder:
-                        value_parsed = line_param.split(_splitparam)
-                        value_parsed = value_parsed[int(_splitorder[split_order])]
-                        print(" {GREEN}+{END} {BOLD}VALUE PARSED{END}: %s\n".format(**colors) \
-                          % value_parsed)
-                if _parameters[_param] in content_html:
-                    for line_param_list in content_html.split("\n"):
-                        if _parameters[_param] in line_param_list:
-                            for split_order in _splitorder:
-                                value_parsed = line_param_list.split(_splitparam)
-                                value_parsed = value_parsed[int(_splitorder[split_order])]
-                                if _parameters[_param] in param_list[user].keys():
-                                    if value_parsed not in param_list[user][_parameters[_param]].values():
-                                        count = len(param_list[user][_parameters[_param]]) + 1
-                                        param_list[user][_parameters[_param]].update({"%s" % str(count):"%s" % value_parsed})
-                                else:
-                                    param_list[user].update({"%s" % _parameters[_param]:{"1":"%s" % value_parsed}})
-        #self.saveOutput(param_list, filename)
+    @staticmethod
+    def long_sleep(seconds):
+        print("{RED}\n[Exceeded rate limit, waiting for {}s]{END}".format(seconds, **colors))
+        bar_size = 50
 
-    def getContainsFile(self, content_html, _contains):
-        print("{GREEN}[+]{END} {BLUE}CONTAIN{END}: ".format(**colors))
-        for line_contains in content_html.split("\n"):
-            if _contains in line_contains:
-                try:
-                    line_contains = line_contains.replace(_contains, \
-                                    '{BOLD}{RED}%s{END}{ITALIC}' % _contains)
-                    print(" {GREEN}+{END} {ITALIC}%s{END}".format(**colors) \
-                          % line_contains.format(**colors))
-                except:
-                    print(" + %s" % line_contains)
+        for i in range(1, seconds + 1):
+            progress = i / seconds
+            sys.stdout.write("\r{BLUE}[{:50} {}-{}s] {:.0%}{END}".format(
+                '=' * int(progress * bar_size), i, seconds, progress, **colors
+            ))
+            sys.stdout.flush()
+            time.sleep(1)
+        sys.stdout.write('\n')
 
-
-    def getRegex(self, content_html, regex):
-        match_regex = re.findall( r'{}'.format(regex), content_html, re.M|re.I)
-        print("\n{GREEN}[+]{END} {BLUE}REGEX FOUND{END}:".format(**colors))
-        for get_regex in match_regex:
-            print("{GREEN} + {END} MATCH: %s".format(**colors) % get_regex) 
-
-
-    def codeParser(self, content_html, config, user, filename, regex):
-        _contains = config['contains']
-        _parameters = config['parameters']
-        _splitparam = config['splitparam']
-        _splitorder = config['splitorder']
-        if "" != _contains:
-            self.getContainsFile(content_html, _contains)
-        if _parameters:
-            print("\n{GREEN}[+]{END} {BLUE}PARAM FOUND{END}:".format(**colors))
-            try:
-                self.parseParameters(content_html, _parameters, _splitparam, _splitorder, user, filename)
-            except Exception as inst:
-                #print(inst)
-                pass
-        
-        if regex is not None:
-            self.getRegex(content_html, regex)
-
-        print("\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬")
-
-
-    def getNumPages(self, content):
+    @staticmethod
+    def get_num_pages(content):
         tree = html.fromstring(content)
-        number_page = tree.xpath(self.PAGINATION)
+        number_page = tree.xpath(Parser.PAGINATION)
         if number_page:
-            return number_page[len(number_page)-2]
+            return number_page[len(number_page) - 2]
         else:
             return "1"
 
-    def getSearch(self, content, number_page, headers, cookie, config, filename, regex):
+    def save_link(self, link):
+        if self.file is not None:
+            self.file.write(link)
+            self.file.write('\n')
+
+    def search(self, url, current_retry):
+        content = requestPage(self.GITHUB_URL + url, self.headers, self.cookie).content
         tree = html.fromstring(content)
-        url_file = tree.xpath(self.URLFILE)
-        last_indexed = tree.xpath(self.LASTINDEXED)
-        user = tree.xpath(self.USER)
-        next_page = tree.xpath(self.NEXTPAGE)
-        headers_raw = head.getHeadersRaw()
-        for number_url in range(len(url_file)):
-            url_code = self.github_raw_url + url_file[number_url].replace("blob/","")
-            content_html = requestPage(url_code, headers_raw, cookie)
-            content_html = content_html.text
-            user = url_file[number_url].split("/")[1]
-            print("{GREEN}[+]{END} {BLUE}USER{END}: %s".format(**colors) % user )
-            print("{GREEN}[+]{END} {BLUE}LINK{END}: %s\n".format(**colors) % url_code)
-            try:
-                print("{GREEN}[+]{END} {BLUE}LAST INDEXED{END}: %s".format(**colors) \
-                      % last_indexed[number_url])
-            except Exception as inst:
-                #print(inst)
-                pass
-            self.saveLink(url_file[number_url], filename)
-            self.codeParser(content_html, config, user, filename, regex)
+        url_file = tree.xpath(self.URL_FILE)
+        next_page = tree.xpath(self.NEXT_PAGE)
+        repos_per_page = len(url_file)
+        current_page = url.split("&")[1].split("=")[1]
 
-        if not next_page:
-            sys.exit() 
+        if not next_page or len(next_page) < 0:
+            if "You have exceeded a secondary rate limit" in str(content):
+                self.long_sleep(60)
+                self.search(url, 0)
+            else:
+                exit()
 
-        next_page = next_page[0]
-        next_page = self.github_url + next_page
-        nextPage(next_page, number_page, headers, cookie, config, filename, regex)
+        if repos_per_page == 0:
+            if current_retry < MAX_RETRIES:
+                print("{RED}\n+[No repositories found in page {}] Retrying {}/{}{END}: ".format(
+                    current_page, current_retry + 1, MAX_RETRIES, **colors
+                ))
+                self.search(url, current_retry + 1)
+            else:
+                self.search(next_page[0], 0)
+        else:
+            print(("{YELLOW}\n+[PAGE {}/{}]-----------------------------------------+{END}\n" +
+                   "{GREEN}[Repositories found in this page: {}]{END}: ").format(
+                current_page, self.total_pages, repos_per_page, **colors
+            ))
+
+            for number_url in range(repos_per_page):
+                repo_url = self.GITHUB_URL + url_file[number_url].split("/blob")[0]
+                if repo_url not in self.seen_urls:
+                    user = url_file[number_url].split("/")[1]
+                    print("{GREEN}[+]{END} {BLUE}USER{END}: {}".format(user, **colors))
+                    print("{GREEN}[+]{END} {BLUE}LINK{END}: {}\n".format(repo_url, **colors))
+                    self.save_link(repo_url)
+                    self.seen_urls.add(repo_url)
+
+            self.search(next_page[0], 0)
