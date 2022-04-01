@@ -20,41 +20,58 @@ except NameError:
     raw_input = input  # Python 3
 
 
+MAX_PAGE = 100
 class GitMiner(object):
 
     def __init__(self):
         self.description = bn.banner()
+        self.seen_links = set()
         parser = argparse.ArgumentParser(self.description)
         parser.add_argument('-q', '--query', metavar='{BLUE}"filename:shadow path:etc"{END}'.format(**colors),
                             help='{YELLOW}Specify search term{END}'.format(**colors), required=True)
         parser.add_argument('-o', '--output', metavar='{BLUE}result.txt{END}'.format(**colors),
                             help='{YELLOW}Specify the output file where it will be saved{END}'.format(**colors),
                             default=None)
-        parser.add_argument('-c', '--cookie', metavar='{BLUE}cookie.txt{END}'.format(**colors), default=None,
-                            required=True)
         self.args = parser.parse_args()
 
-        if self.args.query is None or self.args.cookie is None:
+        if self.args.query is None: 
             os.system('cls' if os.name == 'nt' else 'clear')
             parser.print_help()
             exit()
-        with open(self.args.cookie) as txt:
-            for line in txt:
-                self.cookie = headers.parse_cookie(line)
-        self.search_term = requote_uri("/search?o=desc&p=1&q=%s&s=indexed&type=Code" % self.args.query)
+        self.search_term = requote_uri("/search/code?q=%s&per_page=10" % self.args.query)
 
+    def persist_repos(self, repos, file):
+        print("peristing repos", repos)
+        for link in repos:
+            if file is not None:
+                file.write(link)
+                file.write('\n')
+                file.flush()
+                
+    def save_repos(self, data, file):
+        print("total repo " , len(data["items"]))
+        repo_links = map(lambda x: x['repository']['html_url'], data['items'])
+        repo_links_filtered = []
+        for link in repo_links:
+            if not link in self.seen_links:
+                self.seen_links.add(link)
+                repo_links_filtered.append(link)
+        self.persist_repos(repo_links_filtered, file)
+        
     def start(self):
-        print(self.description)
         filename = self.args.output
         url_search = Parser.GITHUB_URL + self.search_term
         headers_github = headers.get_headers(url_search)
-
-        content_html = requestPage(url_search, headers_github, self.cookie)
-
+        headers_github['Accept'] = ''
+        
         with open(filename, 'a') as file:
-            total_pages = Parser.get_num_pages(content_html.content)
-            p = Parser(headers_github, self.cookie, file, total_pages)
-            p.search(self.search_term, 0)
+            self.parser = Parser(headers_github, file)
+            for i in range(1, MAX_PAGE):
+                data, status = requestPage(url_search + "&page=" + str(i), headers_github )
+                print("status", status)
+                if status == "OK":
+                    self.save_repos(data, file)
+                    
 
 
 try:

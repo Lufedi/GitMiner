@@ -18,14 +18,12 @@ class Parser(object):
     URL_FILE = '//*[@id="code_search_results"]/div[*]/div[*]/div/div[2]/a/@href'
     NEXT_PAGE = '//a[contains(@class, "next_page")]/@href'
     # URL GITHUB
-    GITHUB_URL = 'https://github.com'
+    GITHUB_URL = 'https://api.github.com'
     GITHUB_RAW_URL = 'https://raw.githubusercontent.com'
 
-    def __init__(self, headers, cookie, file, total_pages):
-        self.cookie = cookie
+    def __init__(self, headers, file):
         self.headers = headers
         self.file = file
-        self.total_pages = total_pages
 
         self.seen_urls = set()
 
