@@ -10,17 +10,19 @@ MAX_RESTRIES =  4
 
 def do_request(url, headers):
     time.sleep(2.5)
-    res = requests.get(url, headers=headers, auth=HTTPBasicAuth("ThorfexD", "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"))
+    res = requests.get(url, headers=headers)
     if res.status_code  == 200:
         return (res.json(), "OK")
     elif res.status_code == 403:
         while res.status_code == 403:
             time.sleep(60)
-            res = requests.get(url, headers=headers, auth=HTTPBasicAuth("ThorfexD", "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"))
+            res = requests.get(url, headers=headers )
         return (res.json(), "OK")
     elif str(res.status_code).startswith("4"):
+        print(res.json())
         return (None, "BAD_REQUEST")
     else:
+        print(res.json())
         return (None, "ERROR")
 
 def requestPage(url, headers):

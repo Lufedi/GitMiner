@@ -3,8 +3,8 @@ import time
 
 from lxml import html
 
-from core.sendRequest import requestPage
 from config.banner import colors
+from core.sendRequest import requestPage
 
 MAX_RETRIES = 5
 
